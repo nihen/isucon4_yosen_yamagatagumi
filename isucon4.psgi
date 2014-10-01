@@ -16,6 +16,7 @@ my $users = +{};
 my $ips = +{};
 my $banned_ips = +{};
 my $locked_users = +{};
+my $add_logs = [];
 
 my $mysessionstore = +{};
 
@@ -98,7 +99,7 @@ $log_read_mode = 0;
 sub add_log {
     my ($time, $login, $ip, $succeeded) = @_;
     if ( !$log_read_mode ) {
-        $user_used_add_log->printflush(join("\t", $time, $login, $ip, $succeeded), "\n");
+        push $add_logs, [$time, $login, $ip, $succeeded];
     }
     my $user = $users->{$login};
     my $ip_count = $ips->{$ip} // 0;
@@ -214,6 +215,10 @@ sub app {
             return ['302', [Location => "${uri_base}/"], []];
         }
         elsif ( $path_info eq '/report' ) {
+            for my $add_log ( @$add_logs ) {
+                $user_used_add_log->printflush(join("\t", @$add_log), "\n");
+            }
+            $add_logs = [];
             return ['200', ['Content-Type' => 'application/json'], [
                 encode_json({
                     banned_ips => [keys $banned_ips],
