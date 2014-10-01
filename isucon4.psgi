@@ -9,13 +9,6 @@ use IO::File::WithPath;
 
 my $uri_base = 'http://localhost';
 
-my $flashs = [
-    'This account is locked.',
-    q{You're banned.},
-    'Wrong username or password',
-    'You must be logged in',
-];
-
 my $header = ['content-type' => 'text/html'];
 my $user_lock_threshold = $ENV{'ISU4_USER_LOCK_THRESHOLD'} || 3;
 my $ip_ban_threshold = $ENV{'ISU4_IP_BAN_THRESHOLD'} || 10;
@@ -163,58 +156,6 @@ sub base_bottom() {q{</div>
 </html>
 }}
 
-sub content_index {
-    my $session = shift;
-
-    my @body = (q{<div id="be-careful-phising" class="panel panel-danger">
-  <div class="panel-heading">
-    <span class="hikaru-mozi">偽画面にご注意ください！</span>
-  </div>
-  <div class="panel-body">
-    <p>偽のログイン画面を表示しお客様の情報を盗み取ろうとする犯罪が多発しています。</p>
-    <p>ログイン直後にダウンロード中や、見知らぬウィンドウが開いた場合、<br>すでにウィルスに感染している場合がございます。即座に取引を中止してください。</p>
-    <p>また、残高照会のみなど、必要のない場面で乱数表の入力を求められても、<br>絶対に入力しないでください。</p>
-  </div>
-</div>
-
-<div class="page-header">
-  <h1>ログイン</h1>
-</div>
-    });
-
-    if ( $session && exists $session->{flash} ) {
-        my $flash = delete $session->{flash};
-        push @body, sprintf(q{  <div id="notice-message" class="alert alert-danger" role="alert">%s</div>}, $flashs->[$flash]);
-    }
-
-    push @body, q{
-
-
-<div class="container">
-  <form class="form-horizontal" role="form" action="/login" method="POST">
-    <div class="form-group">
-      <label for="input-username" class="col-sm-3 control-label">お客様ご契約ID</label>
-      <div class="col-sm-9">
-        <input id="input-username" type="text" class="form-control" placeholder="半角英数字" name="login">
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="input-password" class="col-sm-3 control-label">パスワード</label>
-      <div class="col-sm-9">
-        <input type="password" class="form-control" id="input-password" name="password" placeholder="半角英数字・記号（２文字以上）">
-      </div>
-    </div>
-    <div class="form-group">
-      <div class="col-sm-offset-3 col-sm-9">
-        <button type="submit" class="btn btn-primary btn-lg btn-block">ログイン</button>
-      </div>
-    </div>
-  </form>
-</div>};
-
-    return @body;
-}
-
 sub mypage {
     my $env = shift;
     my $user = $env->{user};
@@ -265,10 +206,7 @@ sub mypage {
 sub set_flash {
     my $msg_id = shift;
     
-    my $session = +{flash => $msg_id};
-    my $sid = _generate_sid();
-    $mysessionstore->{$sid} = $session;
-    return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_session=$sid; path=/; HttpOnly"], []];
+    return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_flash=$msg_id; path=/; HttpOnly"], []];
 }
 
 sub _generate_sid {
@@ -283,15 +221,20 @@ sub post_login {
     my $login    = $param->{login};
     my $password = $param->{password};
     my $user     = $users->{$login};
-    my $ip       = $env->{REMOTE_ADDR};
+
+    if ( $env->{'HTTP_X_FORWARDED_FOR'} ) {
+        my ( $ip, ) = $env->{HTTP_X_FORWARDED_FOR} =~ /([^,\s]+)$/;
+        $env->{REMOTE_ADDR} = $ip;
+    }
+    my $ip = $env->{REMOTE_ADDR};
 
     if ( exists $banned_ips->{$ip} ) {
         add_log(time, $login, $ip, 0);
-        return set_flash(1); # You're banned.
+        return set_flash(2); # You're banned.
     }
     if ( exists $locked_users->{$login} ) {
         add_log(time, $login, $ip, 0);
-        return set_flash(0); # This account is locked.
+        return set_flash(1); # This account is locked.
     }
 
     if ( $user && $user->{password} eq $password ) {
@@ -304,66 +247,32 @@ sub post_login {
     }
 
     add_log(time, $login, $ip, 0);
-    return set_flash(2); # Wrong username or password
+    return set_flash(3); # Wrong username or password
 }
-
 
 sub app {
-    my $env = shift;
-    my $res = _app($env);
-    if ( $res->[0] == 404 ) {
-        $res->[2] = [notfound()];
-    }
-    if ( exists $env->{user} ) {
-        my $myheader = [@{$res->[1]}];
-        push $myheader, 'Cache-Control', 'private';
-        $res->[1] = $myheader;
-    }
-    return $res;
-}
-
-sub _app {
     my $env = shift;
     my $method    = $env->{REQUEST_METHOD};
     my $path_info = $env->{PATH_INFO};
 
     $path_info =~ s{\A/user}{};
 
-    if ( $env->{'HTTP_X_FORWARDED_FOR'} ) {
-        my ( $ip, ) = $env->{HTTP_X_FORWARDED_FOR} =~ /([^,\s]+)$/;
-        $env->{REMOTE_ADDR} = $ip;
-    }
-
     $uri_base = 'http://' . $env->{HTTP_HOST};
 
-    my $sid = $env->{'psgix.nginx_request'}->variable('cookie_isu4_session');
-    my $session = $sid ? $mysessionstore->{$sid} : undef;
- 
-    if ( $session && exists $session->{login} && exists $users->{$session->{login}} ) {
-        $env->{user} = $users->{$session->{login}};
-    }
-
     if ( $method eq 'GET' ) {
-        if ( $path_info eq '/' ) {
-            my @cookie_rm_header = $sid ? (
-                'Set-Cookie' => "isu4_session=$sid; path=/; HttpOnly; expires=Fri, 31-Dec    -1999 23:59:59 GMT"
-            ) : ();
-            if ( $session && exists $session->{flash} ) {
-                return ['200', [@$header, @cookie_rm_header], [
+        if ( $path_info eq '/mypage' ) {
+            my $sid = $env->{'psgix.nginx_request'}->variable('cookie_isu4_session');
+            my $session = $sid ? $mysessionstore->{$sid} : undef;
+ 
+            if ( $session && exists $session->{login} && exists $users->{$session->{login}} ) {
+                $env->{user} = $users->{$session->{login}};
+                return ['200', $header, [
                     base_top(),
-                    content_index($session),
+                    mypage($env),
                     base_bottom(),
                 ]];
-	    }
-	    return ['200', [@$header, @cookie_rm_header], IO::File::WithPath->new('/home/isucon/webapp/public/index.html')];
-        }
-        elsif ( $path_info eq '/mypage' ) {
-            return ['302', [Location => "${uri_base}/"], []] unless $env->{user};
-            return ['200', $header, [
-                base_top(),
-                mypage($env),
-                base_bottom(),
-            ]];
+            }
+            return ['302', [Location => "${uri_base}/"], []];
         }
         elsif ( $path_info eq '/report' ) {
             return ['200', ['Content-Type' => 'application/json; charset=UTF-8'], [
@@ -374,7 +283,7 @@ sub _app {
             ]];
         }
     }
-    elsif ( $method eq 'POST' ) {
+    elsif ( $method eq 'POST' && $path_info eq '/login' ) {
         my $input = delete $env->{'psgi.input'};
         my $body = '';
         $input->read($body, $env->{CONTENT_LENGTH});
@@ -384,9 +293,7 @@ sub _app {
             $_ = uri_unescape($_);
         }
 
-        if ( $path_info eq '/login' ) {
-            return post_login($env);
-        }
+        return post_login($env);
     }
 
     return ['404', $header, ['not found']];
