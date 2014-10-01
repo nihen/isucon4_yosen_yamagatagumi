@@ -1,5 +1,4 @@
 use 5.20.0;
-use utf8;
 use IO::Handle;
 use POSIX qw/strftime/;
 use JSON::XS;
@@ -129,7 +128,7 @@ sub add_log {
 }
 
 
-sub base_top() {q{<!DOCTYPE html><html><head><meta charset="UTF-8"><title>isucon4</title></head><body><script>document.write(' <link rel="stylesheet" href="/stylesheets/bootstrap.min.css"><link rel="stylesheet" href="/stylesheets/bootflat.min.css"><link rel="stylesheet" href="/stylesheets/isucon-bank.css"> ')</script><div class="container"><h1 id="topbar"><a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="ã„ã™ã“ã‚“éŠ€è¡Œ ã‚ªãƒ³ãƒ©ã‚¤ãƒ³ãƒãƒ³ã‚­ãƒ³ã‚°ã‚µãƒ¼ãƒ“ã‚¹">')</script></a></h1>}}
+sub base_top() {q{<!DOCTYPE html><html><head><meta charset="Shift_JIS"><title>isucon4</title></head><body><script>document.write(' <link rel="stylesheet" href="/stylesheets/bootstrap.min.css"><link rel="stylesheet" href="/stylesheets/bootflat.min.css"><link rel="stylesheet" href="/stylesheets/isucon-bank.css"> ')</script><div class="container"><h1 id="topbar"><a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="‚¢‚·‚±‚ñ‹âs ƒIƒ“ƒ‰ƒCƒ“ƒoƒ“ƒLƒ“ƒOƒT[ƒrƒX">')</script></a></h1>}}
 
 sub base_bottom() {q{</div></body></html>}}
 
@@ -138,7 +137,7 @@ sub mypage {
     my $user = $env->{user};
 
     sprintf(
-        q{<div class="alert alert-success" role="alert"> ãƒ­ã‚°ã‚¤ãƒ³ã«æˆåŠŸã—ã¾ã—ãŸã€‚<br>æœªèª­ã®ãŠçŸ¥ã‚‰ã›ãŒï¼ä»¶ã€æ®‹ã£ã¦ã„ã¾ã™ã€‚</div><dl class="dl-horizontal"><dt>å‰å›žãƒ­ã‚°ã‚¤ãƒ³</dt><dd id="last-logined-at">%s</dd><dt>æœ€çµ‚ãƒ­ã‚°ã‚¤ãƒ³IPã‚¢ãƒ‰ãƒ¬ã‚¹</dt><dd id="last-logined-ip">%s</dd></dl><div class="panel panel-default"><div class="panel-heading"> ãŠå®¢æ§˜ã”å¥‘ç´„IDï¼š%s æ§˜ã®ä»£è¡¨å£åº§ </div><div class="panel-body"><div class="row"><div class="col-sm-4"> æ™®é€šé é‡‘<br><small>æ±äº¬æ”¯åº—ã€€1111111111</small><br></div><div class="col-sm-4"><p id="zandaka" class="text-right"> â€•â€•â€•å†† </p></div><div class="col-sm-4"><p><a class="btn btn-success btn-block">å…¥å‡ºé‡‘æ˜Žç´°ã‚’è¡¨ç¤º</a><a class="btn btn-default btn-block">æŒ¯è¾¼ãƒ»æŒ¯æ›¿ã¯ã“ã¡ã‚‰ã‹ã‚‰</a></p></div><div class="col-sm-12"><a class="btn btn-link btn-block">å®šæœŸé é‡‘ãƒ»ä½å®…ãƒ­ãƒ¼ãƒ³ã®ãŠç”³è¾¼ã¿ã¯ã“ã¡ã‚‰</a></div></div></div></div></div>},
+        q{<div class="alert alert-success" role="alert"> ƒƒOƒCƒ“‚É¬Œ÷‚µ‚Ü‚µ‚½B<br>–¢“Ç‚Ì‚¨’m‚ç‚¹‚ª‚OŒAŽc‚Á‚Ä‚¢‚Ü‚·B</div><dl class="dl-horizontal"><dt>‘O‰ñƒƒOƒCƒ“</dt><dd id="last-logined-at">%s</dd><dt>ÅIƒƒOƒCƒ“IPƒAƒhƒŒƒX</dt><dd id="last-logined-ip">%s</dd></dl><div class="panel panel-default"><div class="panel-heading"> ‚¨‹q—l‚²Œ_–ñIDF%s —l‚Ì‘ã•\ŒûÀ </div><div class="panel-body"><div class="row"><div class="col-sm-4"> •’Ê—a‹à<br><small>“Œ‹žŽx“X@1111111111</small><br></div><div class="col-sm-4"><p id="zandaka" class="text-right"> \\\‰~ </p></div><div class="col-sm-4"><p><a class="btn btn-success btn-block">“üo‹à–¾×‚ð•\Ž¦</a><a class="btn btn-default btn-block">UžEU‘Ö‚Í‚±‚¿‚ç‚©‚ç</a></p></div><div class="col-sm-12"><a class="btn btn-link btn-block">’èŠú—a‹àEZ‘îƒ[ƒ“‚Ì‚¨\ž‚Ý‚Í‚±‚¿‚ç</a></div></div></div></div></div>},
         $user->{last_login1} ? strftime('%Y-%m-%d %H:%M:%S', localtime($user->{last_login1})) : '',
         $user->{last_ip1},
         $user->{login}
