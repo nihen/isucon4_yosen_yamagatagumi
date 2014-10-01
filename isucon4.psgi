@@ -1,7 +1,6 @@
 use 5.20.0;
 use utf8;
 use IO::Handle;
-use Encode;
 use POSIX qw/strftime/;
 use JSON::XS;
 use URI::Escape::XS qw/uri_unescape/;
@@ -23,6 +22,7 @@ my $mysessionstore = +{};
 my $user_log_file = '/home/isucon/sql/dummy_users.tsv';
 my $user_used_log_file = '/home/isucon/sql/dummy_users_used.tsv';
 my $user_used_add_log_file = '/home/isucon/sql/dummy_users_used_add.tsv';
+my $user_used_add_warmup_log_file = '/home/isucon/sql/dummy_users_used_add_warmup.tsv';
 
 my $user_used_add_log;
 
@@ -39,6 +39,27 @@ our $log_read_mode = 0;
             my ($id, $login, $pass) = split/\t/, $line;
             my $user = {login => $login, password => $pass, count => 0};
             $users->{$login} = $user;
+        }
+    }
+
+    {
+        # warmup
+        if ( -e $user_used_add_warmup_log_file ) {
+            open my $user_used_add_warmup_log, '<', $user_used_add_warmup_log_file;
+            my @lines = <$user_used_add_warmup_log>;
+            $user_used_add_warmup_log->close;
+            for my $line (@lines) {
+                chomp $line;
+                my ($created_at, $login, $ip, $succeeded) = split/\t/, $line;
+                add_log($created_at, $login, $ip, $succeeded);
+            }
+            # cleanup
+            $locked_users = +{};
+            $banned_ips = +{};
+            $ips = +{};
+            for my $login ( keys $users ) {
+                $users->{$login}{count} = 0;
+            }
         }
     }
 
@@ -108,103 +129,20 @@ sub add_log {
 }
 
 
-sub notfound() {q{<!doctype html>
-<html>
-<head>
-<meta charset=utf-8 />
-<style type="text/css">
-.message {
-  font-size: 200%;
-  margin: 20px 20px;
-  color: #666;
-}
-.message strong {
-  font-size: 250%;
-  font-weight: bold;
-  color: #333;
-}
-</style>
-</head>
-<body>
-<p class="message">
-<strong>404</strong> Not Found
-</p>
-</div>
-</body>
-</html>}}
+sub base_top() {q{<!DOCTYPE html><html><head><meta charset="UTF-8"><title>isucon4</title></head><body><script>document.write(' <link rel="stylesheet" href="/stylesheets/bootstrap.min.css"><link rel="stylesheet" href="/stylesheets/bootflat.min.css"><link rel="stylesheet" href="/stylesheets/isucon-bank.css"> ')</script><div class="container"><h1 id="topbar"><a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="いすこん銀行 オンラインバンキングサービス">')</script></a></h1>}}
 
-
-sub base_top() {q{<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <title>isucon4</title>
-  </head>
-  <body>
-<script>
-document.write('
-    <link rel="stylesheet" href="/stylesheets/bootstrap.min.css">
-    <link rel="stylesheet" href="/stylesheets/bootflat.min.css">
-    <link rel="stylesheet" href="/stylesheets/isucon-bank.css">
-')
-</script>
-    <div class="container">
-      <h1 id="topbar">
-        <a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="いすこん銀行 オンラインバンキングサービス">')</script></a>
-      </h1>
-}}
-
-sub base_bottom() {q{</div>
-
-  </body>
-</html>
-}}
+sub base_bottom() {q{</div></body></html>}}
 
 sub mypage {
     my $env = shift;
     my $user = $env->{user};
 
-    sprintf(q{<div class="alert alert-success" role="alert">
-  ログインに成功しました。<br>
-  未読のお知らせが０件、残っています。
-</div>
-
-<dl class="dl-horizontal">
-  <dt>前回ログイン</dt>
-  <dd id="last-logined-at">%s</dd>
-  <dt>最終ログインIPアドレス</dt>
-  <dd id="last-logined-ip">%s</dd>
-</dl>
-
-<div class="panel panel-default">
-  <div class="panel-heading">
-    お客様ご契約ID：%s 様の代表口座
-  </div>
-  <div class="panel-body">
-    <div class="row">
-      <div class="col-sm-4">
-        普通預金<br>
-        <small>東京支店　1111111111</small><br>
-      </div>
-      <div class="col-sm-4">
-        <p id="zandaka" class="text-right">
-          ―――円
-        </p>
-      </div>
-
-      <div class="col-sm-4">
-        <p>
-          <a class="btn btn-success btn-block">入出金明細を表示</a>
-          <a class="btn btn-default btn-block">振込・振替はこちらから</a>
-        </p>
-      </div>
-
-      <div class="col-sm-12">
-        <a class="btn btn-link btn-block">定期預金・住宅ローンのお申込みはこちら</a>
-      </div>
-    </div>
-  </div>
-</div>}, $user->{last_login1} ? strftime('%Y-%m-%d %H:%M:%S', localtime($user->{last_login1})) : '', $user->{last_ip1}, $user->{login});
+    sprintf(
+        q{<div class="alert alert-success" role="alert"> ログインに成功しました。<br>未読のお知らせが０件、残っています。</div><dl class="dl-horizontal"><dt>前回ログイン</dt><dd id="last-logined-at">%s</dd><dt>最終ログインIPアドレス</dt><dd id="last-logined-ip">%s</dd></dl><div class="panel panel-default"><div class="panel-heading"> お客様ご契約ID：%s 様の代表口座 </div><div class="panel-body"><div class="row"><div class="col-sm-4"> 普通預金<br><small>東京支店　1111111111</small><br></div><div class="col-sm-4"><p id="zandaka" class="text-right"> ―――円 </p></div><div class="col-sm-4"><p><a class="btn btn-success btn-block">入出金明細を表示</a><a class="btn btn-default btn-block">振込・振替はこちらから</a></p></div><div class="col-sm-12"><a class="btn btn-link btn-block">定期預金・住宅ローンのお申込みはこちら</a></div></div></div></div></div>},
+        $user->{last_login1} ? strftime('%Y-%m-%d %H:%M:%S', localtime($user->{last_login1})) : '',
+        $user->{last_ip1},
+        $user->{login}
+    );
 }
 
 sub set_flash {
@@ -244,9 +182,8 @@ sub post_login {
     if ( $user && $user->{password} eq $password ) {
         add_log(time, $login, $ip, 1);
 
-        my $session = +{login => $login};
         my $sid = _generate_sid();
-        $mysessionstore->{$sid} = $session;
+        $mysessionstore->{$sid} = $user;
         return ['302', [Location => "${uri_base}/mypage", 'Set-Cookie' => "isu4_session=$sid; path=/; HttpOnly"], []];
     }
 
@@ -259,17 +196,15 @@ sub app {
     my $method    = $env->{REQUEST_METHOD};
     my $path_info = $env->{PATH_INFO};
 
-    $path_info =~ s{\A/user}{};
-
     $uri_base = 'http://' . $env->{HTTP_HOST};
 
     if ( $method eq 'GET' ) {
         if ( $path_info eq '/mypage' ) {
-            my $sid = $env->{'psgix.nginx_request'}->variable('cookie_isu4_session');
-            my $session = $sid ? $mysessionstore->{$sid} : undef;
+            my $sid  = $env->{'psgix.nginx_request'}->variable('cookie_isu4_session');
+            my $user = $mysessionstore->{$sid};
  
-            if ( $session && exists $session->{login} && exists $users->{$session->{login}} ) {
-                $env->{user} = $users->{$session->{login}};
+            if ( $user ) {
+                $env->{user} = $user;
                 return ['200', $header, [
                     base_top(),
                     mypage($env),
@@ -279,7 +214,7 @@ sub app {
             return ['302', [Location => "${uri_base}/"], []];
         }
         elsif ( $path_info eq '/report' ) {
-            return ['200', ['Content-Type' => 'application/json; charset=UTF-8'], [
+            return ['200', ['Content-Type' => 'application/json'], [
                 encode_json({
                     banned_ips => [keys $banned_ips],
                     locked_users => [keys $locked_users],
