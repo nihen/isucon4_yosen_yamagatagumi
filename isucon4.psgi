@@ -5,6 +5,7 @@ use POSIX qw/strftime/;
 use JSON::XS;
 use URI::Escape::XS qw/uri_unescape/;
 use IO::File::WithPath;
+use Digest::SHA1;
 
 my $uri_base = 'http://localhost';
 
@@ -129,34 +130,6 @@ sub add_log {
     }
 }
 
-
-sub base_top() {q{<!DOCTYPE html><html><head><meta charset="UTF-8"><title>isucon4</title></head><body><script>document.write(' <link rel="stylesheet" href="/stylesheets/bootstrap.min.css"><link rel="stylesheet" href="/stylesheets/bootflat.min.css"><link rel="stylesheet" href="/stylesheets/isucon-bank.css"> ')</script><div class="container"><h1 id="topbar"><a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="いすこん銀行 オンラインバンキングサービス">')</script></a></h1>}}
-
-sub base_bottom() {q{</div></body></html>}}
-
-sub mypage {
-    my $env = shift;
-    my $user = $env->{user};
-
-    sprintf(
-        q{<div class="alert alert-success" role="alert"> ログインに成功しました。<br>未読のお知らせが０件、残っています。</div><dl class="dl-horizontal"><dt>前回ログイン</dt><dd id="last-logined-at">%s</dd><dt>最終ログインIPアドレス</dt><dd id="last-logined-ip">%s</dd></dl><div class="panel panel-default"><div class="panel-heading"> お客様ご契約ID：%s 様の代表口座 </div><div class="panel-body"><div class="row"><div class="col-sm-4"> 普通預金<br><small>東京支店　1111111111</small><br></div><div class="col-sm-4"><p id="zandaka" class="text-right"> ―――円 </p></div><div class="col-sm-4"><p><a class="btn btn-success btn-block">入出金明細を表示</a><a class="btn btn-default btn-block">振込・振替はこちらから</a></p></div><div class="col-sm-12"><a class="btn btn-link btn-block">定期預金・住宅ローンのお申込みはこちら</a></div></div></div></div></div>},
-        $user->{last_login1} ? strftime('%Y-%m-%d %H:%M:%S', localtime($user->{last_login1})) : '',
-        $user->{last_ip1},
-        $user->{login}
-    );
-}
-
-sub set_flash {
-    my $msg_id = shift;
-    
-    return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_flash=$msg_id; path=/; HttpOnly"], []];
-}
-
-sub _generate_sid {
-    use Digest::SHA1;
-    return Digest::SHA1::sha1_hex(rand() . $$ . {} . time);
-}
-
 sub post_login {
     my $env = shift;
 
@@ -173,23 +146,24 @@ sub post_login {
 
     if ( exists $banned_ips->{$ip} ) {
         add_log(time, $login, $ip, 0);
-        return set_flash(2); # You're banned.
+        return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_flash=2; path=/; HttpOnly"], []];
     }
     if ( exists $locked_users->{$login} ) {
         add_log(time, $login, $ip, 0);
-        return set_flash(1); # This account is locked.
+        return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_flash=1; path=/; HttpOnly"], []];
     }
 
     if ( $user && $user->{password} eq $password ) {
         add_log(time, $login, $ip, 1);
 
-        my $sid = _generate_sid();
+        #my $sid = Digest::SHA1::sha1_hex(rand() . $$ . {} . time);
+        my $sid = rand();
         $mysessionstore->{$sid} = $user;
         return ['302', [Location => "${uri_base}/mypage", 'Set-Cookie' => "isu4_session=$sid; path=/; HttpOnly"], []];
     }
 
     add_log(time, $login, $ip, 0);
-    return set_flash(3); # Wrong username or password
+    return ['302', [Location => "${uri_base}/", 'Set-Cookie' => "isu4_flash=3; path=/; HttpOnly"], []];
 }
 
 sub app {
@@ -205,11 +179,16 @@ sub app {
             my $user = $mysessionstore->{$sid};
  
             if ( $user ) {
-                $env->{user} = $user;
                 return ['200', $header, [
-                    base_top(),
-                    mypage($env),
-                    base_bottom(),
+                    \q{<!DOCTYPE html><html><head><meta charset="UTF-8"><title>isucon4</title></head><body><script>document.write('<link rel="stylesheet" href="/stylesheets/bootstrap.min.css"><link rel="stylesheet" href="/stylesheets/bootflat.min.css"><link rel="stylesheet" href="/stylesheets/isucon-bank.css">')</script><div class="container"><h1 id="topbar"><a href="/"><script>document.write('<img src="/images/isucon-bank.png" alt="いすこん銀行 オンラインバンキングサービス">')</script></a></h1>},
+                    \q{<div class="alert alert-success" role="alert"> ログインに成功しました。<br>未読のお知らせが０件、残っています。</div><dl class="dl-horizontal"><dt>前回ログイン</dt><dd id="last-logined-at">},
+                    $user->{last_login1} ? (\strftime('%Y-%m-%d %H:%M:%S', localtime($user->{last_login1}))) : (),
+                    \q{</dd><dt>最終ログインIPアドレス</dt><dd id="last-logined-ip">},
+                    $user->{last_ip1} ? (\$user->{last_ip1}) : (),
+                    \q{</dd></dl><div class="panel panel-default"><div class="panel-heading"> お客様ご契約ID：},
+                    \$user->{login},
+                    \q{ 様の代表口座 </div><div class="panel-body"><div class="row"><div class="col-sm-4"> 普通預金<br><small>東京支店　1111111111</small><br></div><div class="col-sm-4"><p id="zandaka" class="text-right"> ―――円 </p></div><div class="col-sm-4"><p><a class="btn btn-success btn-block">入出金明細を表示</a><a class="btn btn-default btn-block">振込・振替はこちらから</a></p></div><div class="col-sm-12"><a class="btn btn-link btn-block">定期預金・住宅ローンのお申込みはこちら</a></div></div></div></div></div>},
+                    \q{</div></body></html>},
                 ]];
             }
             return ['302', [Location => "${uri_base}/"], []];
